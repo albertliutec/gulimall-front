@@ -9,6 +9,9 @@
       :props="defaultProps"
       :default-expanded-keys="expandedKey"
       :expand-on-click-node="false"
+      :draggable="true"
+      :allow-drop="allowDrop"
+      @node-drop="handleDrop"
     >
       <span class="custom-tree-node" slot-scope="{ node, data }">
         <span>{{ node.label }}</span>
@@ -56,6 +59,9 @@
             autocomplete="off"
           ></el-input>
         </el-form-item>
+        <el-form-item label="层级">
+          <el-input v-model="category.catLevel" autocomplete="off"></el-input>
+        </el-form-item>
       </el-form>
       <span slot="footer" class="dialog-footer">
         <el-button @click="cleanDialog">取 消</el-button>
@@ -94,7 +100,6 @@ export default {
       dialogVisible: false,
       // 对话框类型
       dialogType: null,
-
       // 对话框表单绑定对象
       category: {
         catId: null,
@@ -106,10 +111,19 @@ export default {
         icon: null,
         productUnit: null,
       },
+
+      // 拖拽属性
+      // 总层数
+      totalDepth: 3,
+      // 被拖拽最大节点深度，默认是1不是0，因为拖拽任意单个元素就已经有1层了
+      maxDepth: 1,
+      // 需要更新顺序的数组
+      updateNodes: [],
     };
   },
 
   methods: {
+    // 刷新表单
     getMenus() {
       this.$http({
         url: this.$http.adornUrl("/product/category/list/tree"),
@@ -127,7 +141,6 @@ export default {
       // 获取上级菜单ID
       this.category.parentCid = this.category.catId;
       this.category.catLevel = this.category.catLevel * 1 + 1;
-      console.log(this.category);
 
       // 更新种类信息为待填写状态
       this.category.catId = null;
@@ -136,7 +149,6 @@ export default {
       this.category.sort = 0;
       this.category.icon = null;
       this.category.productUnit = null;
-      // console.log(this.category);
 
       // 显示添加对话框
       this.dialogVisible = true;
@@ -155,10 +167,14 @@ export default {
     // 提交数据
     async submitData() {
       if (this.dialogType == "append") {
-        await this.save("save", "添加");
+        await this.save("save", this.category, "添加", [
+          this.category.parentCid,
+        ]);
       }
       if (this.dialogType == "edit") {
-        await this.save("update", "修改");
+        await this.save("update", this.category, "修改", [
+          this.category.parentCid,
+        ]);
       }
     },
 
@@ -190,18 +206,18 @@ export default {
     },
 
     // 添加保存数据库
-    async save(url, action) {
+    async save(url, data, action, expand) {
       // 发请求
       await this.$http({
         url: this.$http.adornUrl(`/product/category/${url}`),
         method: "post",
-        data: this.$http.adornData(this.category, false),
+        data: this.$http.adornData(data, false),
       })
         .then((data) => {
           // 更新
           this.getMenus();
           //展开父级菜单
-          this.expandedKey = [this.category.parentCid];
+          this.expandedKey = expand;
           // 提示成功
           this.$message({
             type: "success",
@@ -214,6 +230,8 @@ export default {
         });
       // 清空并关闭对话框
       this.cleanDialog();
+      // 清空更新节点列表
+      this.cleanUpdateNodes();
     },
 
     // 删除
@@ -245,6 +263,128 @@ export default {
             this.$message.error("删除失败！");
           });
       });
+    },
+
+    // 是否允许拖拽
+    allowDrop(draggingNode, dropNode, type) {
+      // 清空历史数据
+      this.cleanUpdateNodes();
+
+      // 计算被拖拽节点最大深度
+      this.countMaxDepth(draggingNode.data);
+
+      // 计算被拖拽子树深度
+      let dragingTreeDepth = this.maxDepth - draggingNode.data.catLevel + 1;
+
+      // console.log(
+      //   "maxdepth:",
+      //   this.maxDepth,
+      //   "dragingTreeDepth:",
+      //   dragingTreeDepth,
+      //   // "draggingNode.data.catLevel:",
+      //   // draggingNode.data.catLevel,
+      //   "dropNode.level:",
+      //   dropNode.level,
+      //   // "dropNode.parent.level:",
+      //   // dropNode.parent.level,
+      //   "this.totalDepth",
+      //   this.totalDepth
+      // );
+
+      // 计算拖拽完成后是否超过最大子树深度限制
+      if (type == "inner") {
+        // 与目标节点相加
+        return dropNode.level + dragingTreeDepth <= this.totalDepth;
+      } else {
+        // 与目标节点的父节点相加
+        return dropNode.parent.level + dragingTreeDepth <= this.totalDepth;
+      }
+    },
+
+    // 清空更新列表
+    cleanUpdateNodes() {
+      this.updateNodes = [];
+      this.maxDepth = 1;
+    },
+
+    // 计算被拖拽节点最大深度
+    countMaxDepth(node) {
+      // 如果有子节点，求子节点最大深度，如果没有，就直接拿当前level最为最大深度
+      if (node.children != null && node.children.length > 0) {
+        for (let i = 0; i < node.children.length; i++) {
+          if (node.children[i].catLevel > this.maxDepth) {
+            this.maxDepth = node.children[i].catLevel;
+          }
+          this.countMaxDepth(node.children[i]);
+        }
+      } else {
+        this.maxDepth = node.catLevel;
+      }
+    },
+
+    // 拖拽成功
+    async handleDrop(draggingNode, dropNode, dropType, ev) {
+      console.log("tree drop: ", dropNode.label, dropType);
+
+      // 拿到变化列表，及变化后节点信息父节点ID
+      let pCid = 0;
+      let siblings = null;
+      if (dropType != "inner") {
+        pCid = dropNode.data.parentCid;
+        siblings = dropNode.parent.childNodes;
+      } else {
+        pCid = dropNode.data.catId;
+        siblings = dropNode.childNodes;
+      }
+
+      // 更新排列顺序，并生成更新信息
+      for (let i = 0; i < siblings.length; i++) {
+        // 如果是被拖拽节点
+        if (siblings[i].data.catId == draggingNode.data.catId) {
+          console.log("变化节点列表", siblings[i]);
+          console.log("siblings[i].level", siblings[i].level);
+          console.log("draggingNode.level", draggingNode.level);
+          console.log("name", siblings[i].data.name);
+
+          let cLevel = draggingNode.level;
+          // 且当前节点层级发生改变
+          if (siblings[i].level != draggingNode.level) {
+            // 修改当前节点层级
+            cLevel = siblings[i].level;
+            // 修改子节点层级
+            this.updateChildNodeLevel(siblings[i]);
+            // 保存数据的时候多保存一个层级
+          }
+          this.updateNodes.push({
+            catId: siblings[i].data.catId,
+            sort: i,
+            parentCid: pCid,
+            catLevel: cLevel,
+          });
+        } else {
+          this.updateNodes.push({
+            catId: siblings[i].data.catId,
+            sort: i,
+            parentCid: pCid,
+          });
+        }
+      }
+
+      // 发送更新请求
+      await this.save("update/sort", this.updateNodes, "菜单顺序", [pCid]);
+    },
+
+    // 计算并存储子节点层级
+    updateChildNodeLevel(node) {
+      if (node.childNodes != null && node.childNodes.length > 0) {
+        for (let i = 0; i < node.childNodes.length; i++) {
+          this.updateNodes.push({
+            catId: node.childNodes[i].data.catId,
+            catLevel: node.childNodes[i].level,
+          });
+          this.updateChildNodeLevel(node.childNodes[i]);
+        }
+      }
     },
   },
   //监听属性 类似于data概念
