@@ -8,9 +8,10 @@
       inactive-text="关闭拖拽"
     >
     </el-switch>
-    <el-button v-if="draggable" type="primary" @click="batchSave"
-      >批量保存</el-button
+    <el-button v-if="draggable" type="primary" @click="batchSave" plain
+      >保存拖动</el-button
     >
+    <el-button type="danger" @click="batchRemove" plain>批量删除</el-button>
 
     <!-- 分级菜单展示 -->
     <el-tree
@@ -23,6 +24,7 @@
       :draggable="draggable"
       :allow-drop="allowDrop"
       @node-drop="handleDrop"
+      ref="menuTree"
     >
       <span class="custom-tree-node" slot-scope="{ node, data }">
         <span>{{ node.label }}</span>
@@ -222,7 +224,7 @@ export default {
       this.dialogVisible = false;
     },
 
-    // 添加保存数据库
+    // 请求数据库
     async save(url, data, action, expand) {
       // 发请求
       await this.$http({
@@ -255,26 +257,7 @@ export default {
         type: "warning",
       }).then(() => {
         // 发请求
-        this.$http({
-          url: this.$http.adornUrl("/product/category/delete"),
-          method: "post",
-          data: this.$http.adornData([data.catId], false),
-        })
-          .then((returndata) => {
-            // 更新
-            this.getMenus();
-            //展开父级菜单
-            this.expandedKey = [data.parentCid];
-            // 提示成功
-            this.$message({
-              type: "success",
-              message: "删除成功！",
-            });
-          })
-          .catch(() => {
-            // 提示失败
-            this.$message.error("删除失败！");
-          });
+        this.save("delete", [data.catId], "删除", [data.parentCid]);
       });
     },
 
@@ -292,20 +275,20 @@ export default {
       // 计算被拖拽子树深度
       let dragingTreeDepth = this.maxDepth - draggingNode.level + 1;
 
-      console.log(
-        "maxdepth:",
-        this.maxDepth,
-        "dragingTreeDepth:",
-        dragingTreeDepth,
-        // "draggingNode.data.catLevel:",
-        // draggingNode.data.catLevel,
-        "dropNode.level:",
-        dropNode.level,
-        // "dropNode.parent.level:",
-        // dropNode.parent.level,
-        "this.totalDepth",
-        this.totalDepth
-      );
+      // console.log(
+      //   "maxdepth:",
+      //   this.maxDepth,
+      //   "dragingTreeDepth:",
+      //   dragingTreeDepth,
+      //   // "draggingNode.data.catLevel:",
+      //   // draggingNode.data.catLevel,
+      //   "dropNode.level:",
+      //   dropNode.level,
+      //   // "dropNode.parent.level:",
+      //   // dropNode.parent.level,
+      //   "this.totalDepth",
+      //   this.totalDepth
+      // );
 
       // 计算拖拽完成后是否超过最大子树深度限制
       if (type == "inner") {
@@ -419,6 +402,28 @@ export default {
       }
       // 清空待更新节点列表
       this.cleanUpdateNodes();
+    },
+
+    // 批量删除
+    batchRemove() {
+      // 过滤tree节点(leafOnly, includeHalfChecked)
+      let checkNodes = this.$refs.menuTree.getCheckedNodes();
+      let delName = [];
+      let delCatId = [];
+      for (let i = 0; i < checkNodes.length; i++) {
+        delCatId.push(checkNodes[i].catId);
+        delName.push(checkNodes[i].name);
+      }
+
+      // 发送删除请求
+      this.$confirm(`是否删除【${delName}】菜单`, "提示", {
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning",
+      }).then(() => {
+        // 发请求
+        this.save("delete", delCatId, "批量删除", []);
+      });
     },
   },
   //监听属性 类似于data概念
