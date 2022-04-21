@@ -86,7 +86,7 @@ export default {
               if (value == "") {
                 callback(new Error("首字母必须填写"));
               } else if (!/^[a-zA-Z]$/.test(value)) {
-                callback(new Error("首字母必须为1个字母，并a-z或者A-Z之间"));
+                callback(new Error("首字母必须为1个字母，且位于a-z或者A-Z之间"));
               } else {
                 callback();
               }
