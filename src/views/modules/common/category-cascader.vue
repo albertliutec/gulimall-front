@@ -1,5 +1,5 @@
 <template>
-<!-- 
+  <!-- 
 使用说明：
 1）、引入category-cascader.vue
 2）、语法：<category-cascader :catelogPath.sync="catelogPath"></category-cascader>
@@ -10,7 +10,7 @@
   <div>
     <el-cascader
       filterable
-      clearable 
+      clearable
       placeholder="试试搜索：手机"
       v-model="paths"
       :options="categorys"
@@ -22,7 +22,7 @@
 <script>
 //这里可以导入其他文件（比如：组件，工具js，第三方插件js，json文件，图片文件等等）
 //例如：import 《组件名称》 from '《组件路径》';
-
+import PubSub from "pubsub-js";
 export default {
   //import引入的组件需要注入到对象中才能使用
   components: {},
@@ -30,10 +30,10 @@ export default {
   props: {
     catelogPath: {
       type: Array,
-      default(){
+      default() {
         return [];
-      }
-    }
+      },
+    },
   },
   data() {
     //这里存放数据
@@ -41,37 +41,42 @@ export default {
       setting: {
         value: "catId",
         label: "name",
-        children: "children"
+        children: "children",
       },
       categorys: [],
-      paths: this.catelogPath
+      paths: this.catelogPath,
     };
   },
-  watch:{
-    catelogPath(v){
+  watch: {
+    catelogPath(v) {
       this.paths = this.catelogPath;
     },
-    paths(v){
-      this.$emit("update:catelogPath",v);
-      //还可以使用pubsub-js进行传值
-      // this.PubSub.publish("catPath",v);
-    }
+    // 把catelogPath发布出去
+    paths(v) {
+      console.log("catPath", v, "catPath.length:", v.length);
+      // 如果是删除的情况，就不需要发送请求了
+      if (v != null && v.length != 0) {
+        this.$emit("update:catelogPath", v);
+        //还可以使用pubsub-js进行传值
+        PubSub.publish("catPath", v);
+      }
+    },
   },
   //方法集合
   methods: {
     getCategorys() {
       this.$http({
         url: this.$http.adornUrl("/product/category/list/tree"),
-        method: "get"
+        method: "get",
       }).then(({ data }) => {
         this.categorys = data.data;
       });
-    }
+    },
   },
   //生命周期 - 创建完成（可以访问当前this实例）
   created() {
     this.getCategorys();
-  }
+  },
 };
 </script>
 <style scoped>

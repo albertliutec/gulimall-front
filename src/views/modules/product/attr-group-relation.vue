@@ -1,7 +1,7 @@
 <template>
   <div>
     <el-dialog :close-on-click-modal="false" :visible.sync="visible" @closed="dialogClose">
-      <el-dialog width="40%" title="选择属性" :visible.sync="innerVisible" append-to-body>
+      <el-dialog :close-on-click-modal="false" width="40%" title="选择属性" :visible.sync="innerVisible" append-to-body>
         <div>
           <el-form :inline="true" :model="dataForm" @keyup.enter.native="getDataList()">
             <el-form-item>
